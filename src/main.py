@@ -65,7 +65,7 @@ if __name__ == "__main__":
         StateMachine.add("MoveToGoal", Navigate(), transitions={
                          "find_all": "success", "done": "BackToStart"})
 
-        StateMachine.add("BackToStart", Navegate(),
+        StateMachine.add("BackToStart", Navigate(),
                          transitions={"done": "Turn"})
 
     sis = smach_ros.IntrospectionServer('server_name', sm, '/SM_ROOT')
