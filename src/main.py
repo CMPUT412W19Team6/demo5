@@ -23,22 +23,50 @@ TAGS_FOUND = []
 START_POSE = []
 
 
+class Turn(State):
+    def __init__(self):
+        State.__init__(self, outcomes=["find_far", "find_close"])
+        self.rate = rospy.Rate(10)
+
+    def execute(self, userdata):
+        pass
+
+
+class MoveCloser(State):
+    def __init__(self):
+        State.__init__(self, outcomes=["close_enough", "done"])
+        self.rate = rospy.Rate(10)
+
+    def execute(self, userdata):
+        pass
+
+
+class Navigate(State):
+    def __init__(self):
+        State.__init__(self, outcomes=["find_all", "done"])
+        self.rate = rospy.Rate(10)
+
+    def execute(self, userdata):
+        pass
+
+
 if __name__ == "__main__":
     rospy.init_node('demo5')
 
     sm = StateMachine(outcomes=['success', 'failure'])
     with sm:
 
-        StateMachine.add("Turn", transitions={
+        StateMachine.add("Turn", Turn(), transitions={
                          "find_far": "MoveCloser", "find_close": "MoveToGoal"})
 
-        StateMachine.add("MoveCloser", transitions={
+        StateMachine.add("MoveCloser", MoveCloser(), transitions={
                          "close_enough": "MoveToGoal"})
 
-        StateMachine.add("MoveToGoal", transitions={
+        StateMachine.add("MoveToGoal", Navigate(), transitions={
                          "find_all": "success", "done": "BackToStart"})
 
-        StateMachine.add("BackToStart", transitions={"done": "Turn"})
+        StateMachine.add("BackToStart", Navegate(),
+                         transitions={"done": "Turn"})
 
     sis = smach_ros.IntrospectionServer('server_name', sm, '/SM_ROOT')
     sis.start()
