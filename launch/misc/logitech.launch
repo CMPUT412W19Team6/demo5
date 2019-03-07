@@ -1,0 +1,19 @@
+<!--
+  Driver for the logitech rumblepad2 joystick.
+
+  Use the D pad while pressing and holding the left trigger button (5) to control.
+-->
+<launch>
+  <!--  smooths inputs from cmd_vel_mux/input/teleop_raw to cmd_vel_mux/input/teleop -->
+  <!-- <include file="$(find demo4)/launch/misc/includes/velocity_smoother.launch.xml"/> -->
+
+  <node pkg="turtlebot_teleop" type="turtlebot_teleop_joy" name="turtlebot_teleop_joystick">
+    <param name="scale_angular" value="0.4"/>
+    <param name="scale_linear" value="0.3"/>
+    <!-- <remap from="turtlebot_teleop_joystick/cmd_vel" to="teleop_velocity_smoother/raw_cmd_vel"/> -->
+    <remap from="turtlebot_teleop_joystick/cmd_vel" to="cmd_vel_mux/input/teleop"/>
+  </node>
+
+  <node pkg="joy" type="joy_node" name="joystick"/>
+
+</launch>

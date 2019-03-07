@@ -7,8 +7,8 @@ from geometry_msgs.msg import Twist, Pose
 from smach import State, StateMachine
 import smach_ros
 from dynamic_reconfigure.server import Server
-from comp2.cfg import Comp2Config
 from nav_msgs.msg import Odometry
+from ar_track_alvar_msgs.msg import AlvarMarkers
 from kobuki_msgs.msg import BumperEvent, Sound, Led
 from tf.transformations import decompose_matrix, compose_matrix
 from ros_numpy import numpify
@@ -32,11 +32,40 @@ TAGS_IN_TOTAL = 3
 
 class Turn(State):
     def __init__(self):
-        State.__init__(self, outcomes=["find_far", "find_close"])
+        State.__init__(self, outcomes=["find_far"])
         self.rate = rospy.Rate(10)
+        self.cmd_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
+        self.image_sub = rospy.Subscriber('ar_pose_marker', AlvarMarkers, self.marker_callback)
+        self.marker_detected = False
+        self.rate = rospy.Rate(30)
 
     def execute(self, userdata):
-        pass
+        while not self.marker_detected:
+            msg = Twist()
+            msg.linear.x = 0.0
+            msg.angular.z = 0.4
+            self.cmd_pub.publish(msg)
+            self.rate.sleep()
+        
+        print("hello")
+        self.marker_detected = False
+        self.cmd_pub.publish(Twist())
+
+        return "find_far"
+
+
+    def marker_callback(self, msg):
+        global TAG_POSE, TAGS_FOUND
+
+        if len(msg.markers) > 0:
+            msg = msg.markers[0]
+            print(TAGS_FOUND)
+        
+            if msg.id not in TAGS_FOUND:
+                TAGS_FOUND.append(msg.id)
+                TAG_POSE = msg.pose.pose
+                print(self.marker_detected)
+                self.marker_detected = True
 
 
 class MoveCloser(State):
@@ -126,7 +155,7 @@ if __name__ == "__main__":
     with sm:
 
         StateMachine.add("Turn", Turn(), transitions={
-                         "find_far": "MoveCloser", "find_close": "MoveToGoal"})
+                         "find_far": "MoveCloser"})
 
         StateMachine.add("MoveCloser", MoveCloser(), transitions={
                          "close_enough": "MoveToGoal"})
@@ -135,7 +164,7 @@ if __name__ == "__main__":
                          "find_all": "success", "done": "BackToStart"})
 
         StateMachine.add("BackToStart", Navigate("toStart"),
-                         transitions={"done": "Turn"})
+                         transitions={"done": "Turn", "find_all": "success"})
 
     sis = smach_ros.IntrospectionServer('server_name', sm, '/SM_ROOT')
     sis.start()
