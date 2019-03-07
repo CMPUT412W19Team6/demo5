@@ -20,16 +20,17 @@
     <!-- <include file="$(find demo5)/launch/misc/logitech.launch"/> -->
     <!-- <include file="$(find demo5)/launch/misc/keyboard_teleop.launch"/> -->
 
-    <node name="ar_track_alvar" pkg="ar_track_alvar" type="individualMarkersNoKinect" respawn="false" output="screen">
+    <node name="ar_track_alvar_base" pkg="ar_track_alvar" type="individualMarkersNoKinect" respawn="false" output="screen">
 		<param name="marker_size"           type="double" value="$(arg marker_size)" />
 		<param name="max_new_marker_error"  type="double" value="$(arg max_new_marker_error)" />
 		<param name="max_track_error"       type="double" value="$(arg max_track_error)" />
-		<param name="output_frame"          type="string" value="$(arg output_frame)" />
+		<param name="output_frame"          type="string" value="base_link" />
 
 		<remap from="camera_image"  to="$(arg cam_image_topic)" />
 		<remap from="camera_info"   to="$(arg cam_info_topic)" />
+        <remap from="visualization_marker" to="visualization_marker_base"/>
+        <remap from="ar_pose_marker" to="ar_pose_marker_base"/>
 	</node>
-
     
     <include file="$(find demo5)/launch/misc/amcl.launch.xml">
         <arg name="scan_topic" value="scan"/>
@@ -98,7 +99,7 @@
         <remap from="scan" to="$(arg laser_topic)"/>
 	</node>
     
-    <!-- <node pkg="rviz" type="rviz" name="rviz" args="-d $(find demo5)/simulation/world.rviz"/> -->
+    <node pkg="rviz" type="rviz" name="rviz" args="-d $(find demo5)/simulation/world.rviz"/>
     <node pkg="demo5" type="main.py" name="demo5" output="screen">
         <remap from="cmd_vel" to="navigation_velocity_smoother/raw_cmd_vel"/>
     </node>

@@ -1,17 +1,21 @@
 <launch>
   <arg name="base"      value="$(optenv TURTLEBOT_BASE kobuki)"/> <!-- create, roomba -->
-  <arg name="battery"   value="$(optenv TURTLEBOT_BATTERY /proc/acpi/battery/BAT0)"/>  <!-- /proc/acpi/battery/BAT0 --> 
-  <arg name="gui" default="true"/>
-  <arg name="stacks"    value="$(optenv TURTLEBOT_STACKS hexagons)"/>  <!-- circles, hexagons --> 
-  <arg name="3d_sensor" value="$(optenv TURTLEBOT_3D_SENSOR kinect)"/>  <!-- kinect, asus_xtion_pro --> 
+  <arg name="battery"   value="$(optenv TURTLEBOT_BATTERY /proc/acpi/battery/BAT0)"/>  <!-- /proc/acpi/battery/BAT0 -->
+  <arg name="stacks"    value="$(optenv TURTLEBOT_STACKS hexagons)"/>  <!-- circles, hexagons -->
+  <arg name="3d_sensor" value="$(optenv TURTLEBOT_3D_SENSOR kinect)"/>  <!-- kinect, asus_xtion_pro -->
 
+  <arg name="package"   default=""/>
+  <arg name="gui"       default="true"/>
   <arg name="tf_prefix" default=""/>
-  <arg name="ns" default="" />
-  <arg name="x" default="0"/>
-  <arg name="y" default="0"/>
-  <arg name="z" default="0.1"/>
+  <arg name="ns"        default="" />
+  <arg name="x"         default="0"/>
+  <arg name="y"         default="0"/>
+  <arg name="z"         default="0"/>
+  <arg name="roll"      default="0"/>
+  <arg name="pitch"     default="0"/>
+  <arg name="yaw"       default="0"/>
 
-  <include file="$(find demo4)/launch/misc/includes/$(arg base).launch.xml">
+  <include file="$(eval find(arg('package')) + '/launch/misc/includes/' + arg('base') + '.launch.xml')">
     <arg name="base" value="$(arg base)"/>
     <arg name="stacks" value="$(arg stacks)"/>
     <arg name="3d_sensor" value="$(arg 3d_sensor)"/>
@@ -23,7 +27,7 @@
   
 
   <node pkg="tf" type="static_transform_publisher" name="static_map_odom_tf"
-        args="$(arg x) $(arg y) $(arg z) 0 0 0 map $(arg tf_prefix)/odom 100"/>
+        args="$(arg x) $(arg y) $(arg z) $(arg roll) $(arg pitch) $(arg yaw) map $(arg tf_prefix)/odom 100"/>
 
   <node pkg="robot_state_publisher" type="robot_state_publisher" name="robot_state_publisher">
     <param name="publish_frequency" type="double" value="30.0" />

@@ -4,7 +4,7 @@ import rospy
 import cv2
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import cv_bridge
-from geometry_msgs.msg import Twist, Pose
+from geometry_msgs.msg import Twist, Pose, PoseStamped
 from smach import State, StateMachine
 import smach_ros
 from dynamic_reconfigure.server import Server
@@ -22,6 +22,8 @@ from std_msgs.msg import Bool, String, Int32
 from ar_track_alvar_msgs.msg import AlvarMarkers
 import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
+import tf2_ros
+import tf2_geometry_msgs
 
 TAGS_FOUND = []
 START_POSE = None
@@ -39,7 +41,7 @@ class Turn(State):
         self.rate = rospy.Rate(10)
         self.cmd_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
         self.marker_sub = rospy.Subscriber(
-            'ar_pose_marker', AlvarMarkers, self.marker_callback)
+            'ar_pose_marker_base', AlvarMarkers, self.marker_callback)
         self.marker_detected = False
         self.rate = rospy.Rate(30)
 
@@ -81,40 +83,43 @@ class MoveCloser(State):
         self.rate = rospy.Rate(10)
         self.vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
         self.marker_sub = rospy.Subscriber(
-            'ar_pose_marker', AlvarMarkers, self.marker_callback)
+            'ar_pose_marker_base', AlvarMarkers, self.marker_callback_base)
+
         self.current_marker = None
-        self.tag_pose = None
+        self.tag_pose_base = None
+        self.distance_from_marker = 0.05
+
+        self.tf_buffer = tf2_ros.Buffer(rospy.Duration(1200.0)) #tf buffer length
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
     def execute(self, userdata):
         global CURRENT_POSE
-        global CURRENT_STATEl, START_POSE
+        global CURRENT_STATE, START_POSE
         CURRENT_STATE = "move_closer"
 
+        self.tag_pose_base = None
         self.current_marker = userdata.current_marker
         max_angular_speed = 0.8
         min_angular_speed = 0.0
         max_linear_speed = 0.8
         min_linear_speed = 0.0
 
-        while self.tag_pose is None:
-            pass
-
         while True:
-            if self.tag_pose is not None and self.tag_pose.position.x < 0.5:
+            if self.tag_pose_base is not None and self.tag_pose_base.position.x < 0.5:
                 break
-            elif self.tag_pose is not None and self.tag_pose.position.x > 0.5:
+            elif self.tag_pose_base is not None and self.tag_pose_base.position.x > 0.5:
                 move_cmd = Twist()
 
-                if self.tag_pose.position.x > 0.6:  # goal too far
+                if self.tag_pose_base.position.x > 0.6:  # goal too far
                     move_cmd.linear.x += 0.1
-                elif self.tag_pose.position.x > 0.5:  # goal too close
+                elif self.tag_pose_base.position.x > 0.5:  # goal too close
                     move_cmd.linear.x -= 0.1
                 else:
                     move_cmd.linear.x = 0
 
-                if self.tag_pose.position.y < 1e-3:  # goal to the left
+                if self.tag_pose_base.position.y < 1e-3:  # goal to the left
                     move_cmd.angular.z -= 0.1
-                elif self.tag_pose.position.y > -1e-3:  # goal to the right
+                elif self.tag_pose_base.position.y > -1e-3:  # goal to the right
                     move_cmd.angular.z += 0.1
                 else:
                     move_cmd.angular.z = 0
@@ -129,24 +134,59 @@ class MoveCloser(State):
                 self.vel_pub.publish(move_cmd)
             self.rate.sleep()
 
+        # goal = MoveBaseGoal()
+        # goal.target_pose.header.frame_id = "odom"
+
+        # yaw = euler_from_quaternion((self.tag_pose_odom.orientation.x, self.tag_pose_odom.orientation.y, self.tag_pose_odom.orientation.z, self.tag_pose_odom.orientation.w))[2]
+
+        # yaw += 3.14159 / 2
+        # while yaw < 0:
+        #     yaw += 2 * math.pi
+        # print("yaw is " + str(yaw * 180.0 / 3.14159))
+
+        # goal.target_pose.pose.position.y = self.tag_pose_odom.position.y - 0.4
+        # # if (3.0 / 2.0) * math.pi  <= yaw <= 2 * math.pi:
+        # #     goal.target_pose.pose.position.y = self.tag_pose_odom.position.y + self.distance_from_marker
+        # # elif  math.pi <= yaw <= (3.0 / 2.0) * math.pi:
+        # #     goal.target_pose.pose.position.y = self.tag_pose_odom.position.y + self.distance_from_marker
+        # # elif  (1.0 / 2.0) * math.pi  <= yaw < 2 * math.pi:
+        # #     goal.target_pose.pose.position.y = self.tag_pose_odom.position.y - self.distance_from_marker
+        # # else:
+        # #     goal.target_pose.pose.position.y = self.tag_pose_odom.position.y - self.distance_from_marker
+        
+        # goal.target_pose.pose.position.x = ((goal.target_pose.pose.position.y - self.tag_pose_odom.position.y) / math.sin(yaw)) * math.cos(yaw) + self.tag_pose_odom.position.x
+        # goal.target_pose.pose.orientation.w = 1
+
+        # goal = MoveBaseGoal()
+        # goal.target_pose.header.frame_id = "base_link"
+        # goal.target_pose.pose.position.x = .2
+        # goal.target_pose.pose.orientation.z = 1
+
+        pose = PoseStamped()
+        pose.header.frame_id = "ar_marker_" + str(self.current_marker)
+        pose.header.stamp = rospy.Time.now()
+        pose.pose.position.x = self.distance_from_marker
+
+        transform = self.tf_buffer.lookup_transform("odom", #target frame
+                                       pose.header.frame_id, #source frame
+                                       rospy.Time(0), #get the tf at first available time
+                                       rospy.Duration(2.0)) #wait for 1 second
+
+        pose_transformed = tf2_geometry_msgs.do_transform_pose(pose, transform)
+
         goal = MoveBaseGoal()
-        goal.target_pose.header.frame_id = "odom"
-        goal.target_pose.pose.position.x = 0.2
-        # goal.target_pose.pose.position.x = self.tag_pose.position.x
-        # goal.target_pose.pose.position.y = self.tag_pose.position.y
-        # goal.target_pose.pose.orientation.x = START_POSE.orientation.x
-        # goal.target_pose.pose.orientation.y = START_POSE.orientation.y
-        # goal.target_pose.pose.orientation.w = START_POSE.orientation.w
-        # goal.target_pose.pose.orientation.z = START_POSE.orientation.z
+        goal.target_pose = pose_transformed
+        goal.target_pose.pose.orientation = START_POSE.orientation
         userdata.goal = goal
 
         return "close_enough"
 
-    def marker_callback(self, msg):
-        if self.current_marker is not None:
+    def marker_callback_base(self, msg):
+        global CURRENT_STATE
+        if CURRENT_STATE == "move_closer" and self.current_marker is not None:
             for marker in msg.markers:
                 if marker.id == self.current_marker:
-                    self.tag_pose = marker.pose.pose
+                    self.tag_pose_base = marker.pose.pose
 
 
 class Navigate(State):
@@ -168,9 +208,7 @@ class Navigate(State):
             return "find_all"
         else:
             userdata.goal.target_pose.header.stamp = rospy.Time.now()
-            print("going to goal")
             result = self.move_base_client.send_goal_and_wait(userdata.goal)
-            print(result)
 
             # turn_goal = MoveBaseGoal()
             # turn_goal.target_pose.header.frame_id = "odom"

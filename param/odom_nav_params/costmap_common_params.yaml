@@ -10,7 +10,7 @@ publish_voxel_map: false
 transform_tolerance: 0.5
 meter_scoring: true
 
-robot_radius: 0.15 
+robot_radius: 0.18 
 
 plugins:
 - {name: obstacles_layer, type: "costmap_2d::ObstacleLayer"}
