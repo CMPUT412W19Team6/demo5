@@ -34,10 +34,12 @@ CURRENT_STATE = None
 
 class Turn(State):
     def __init__(self):
-        State.__init__(self, outcomes=["find_far"], output_keys=["current_marker"])
+        State.__init__(self, outcomes=["find_far"],
+                       output_keys=["current_marker"])
         self.rate = rospy.Rate(10)
         self.cmd_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
-        self.marker_sub = rospy.Subscriber('ar_pose_marker', AlvarMarkers, self.marker_callback)
+        self.marker_sub = rospy.Subscriber(
+            'ar_pose_marker', AlvarMarkers, self.marker_callback)
         self.marker_detected = False
         self.rate = rospy.Rate(30)
 
@@ -52,7 +54,7 @@ class Turn(State):
             msg.angular.z = -0.4
             self.cmd_pub.publish(msg)
             self.rate.sleep()
-        
+
         userdata.current_marker = TAGS_FOUND[-1]
         self.marker_detected = False
         self.cmd_pub.publish(Twist())
@@ -65,8 +67,8 @@ class Turn(State):
 
         if CURRENT_STATE == "turn" and len(msg.markers) > 0:
             msg = msg.markers[0]
-        
-            if msg.id not in TAGS_FOUND:
+
+            if msg.id not in TAGS_FOUND and msg.id in [2, 3, 4]:
                 TAGS_FOUND.append(msg.id)
                 TAG_POSE = msg.pose.pose
                 self.marker_detected = True
@@ -74,16 +76,18 @@ class Turn(State):
 
 class MoveCloser(State):
     def __init__(self):
-        State.__init__(self, outcomes=["close_enough"], output_keys=["goal"], input_keys=["current_marker"])
+        State.__init__(self, outcomes=["close_enough"], output_keys=[
+                       "goal"], input_keys=["current_marker"])
         self.rate = rospy.Rate(10)
         self.vel_pub = rospy.Publisher("cmd_vel", Twist, queue_size=1)
-        self.marker_sub = rospy.Subscriber('ar_pose_marker', AlvarMarkers, self.marker_callback)
+        self.marker_sub = rospy.Subscriber(
+            'ar_pose_marker', AlvarMarkers, self.marker_callback)
         self.current_marker = None
         self.tag_pose = None
 
     def execute(self, userdata):
         global CURRENT_POSE
-        global CURRENT_STATE
+        global CURRENT_STATEl, START_POSE
         CURRENT_STATE = "move_closer"
 
         self.current_marker = userdata.current_marker
@@ -101,32 +105,39 @@ class MoveCloser(State):
             elif self.tag_pose is not None and self.tag_pose.position.x > 0.5:
                 move_cmd = Twist()
 
-                if self.tag_pose.position.x > 0.6: # goal too far
+                if self.tag_pose.position.x > 0.6:  # goal too far
                     move_cmd.linear.x += 0.1
-                elif self.tag_pose.position.x > 0.5: # goal too close
+                elif self.tag_pose.position.x > 0.5:  # goal too close
                     move_cmd.linear.x -= 0.1
                 else:
                     move_cmd.linear.x = 0
 
-                if self.tag_pose.position.y < 1e-3: # goal to the left
+                if self.tag_pose.position.y < 1e-3:  # goal to the left
                     move_cmd.angular.z -= 0.1
-                elif self.tag_pose.position.y > -1e-3: # goal to the right
+                elif self.tag_pose.position.y > -1e-3:  # goal to the right
                     move_cmd.angular.z += 0.1
                 else:
                     move_cmd.angular.z = 0
-                
-                move_cmd.linear.x = math.copysign(max(min_linear_speed, min(abs(move_cmd.linear.x), max_linear_speed)), move_cmd.linear.x)
-                move_cmd.angular.z = math.copysign(max(min_angular_speed, min(abs(move_cmd.angular.z), max_angular_speed)), move_cmd.angular.z)
+
+                move_cmd.linear.x = math.copysign(max(min_linear_speed, min(
+                    abs(move_cmd.linear.x), max_linear_speed)), move_cmd.linear.x)
+                move_cmd.angular.z = math.copysign(max(min_angular_speed, min(
+                    abs(move_cmd.angular.z), max_angular_speed)), move_cmd.angular.z)
 
                 move_cmd.linear.x = abs(move_cmd.linear.x)
-                
+
                 self.vel_pub.publish(move_cmd)
             self.rate.sleep()
 
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = "odom"
         goal.target_pose.pose.position.x = 0.2
-        
+        # goal.target_pose.pose.position.x = self.tag_pose.position.x
+        # goal.target_pose.pose.position.y = self.tag_pose.position.y
+        # goal.target_pose.pose.orientation.x = START_POSE.orientation.x
+        # goal.target_pose.pose.orientation.y = START_POSE.orientation.y
+        # goal.target_pose.pose.orientation.w = START_POSE.orientation.w
+        # goal.target_pose.pose.orientation.z = START_POSE.orientation.z
         userdata.goal = goal
 
         return "close_enough"
@@ -145,14 +156,15 @@ class Navigate(State):
         self.rate = rospy.Rate(10)
         self.stage = stage
 
-        self.move_base_client = actionlib.SimpleActionClient("move_base", MoveBaseAction)
+        self.move_base_client = actionlib.SimpleActionClient(
+            "move_base", MoveBaseAction)
 
     def execute(self, userdata):
         global client, TAGS_FOUND, START_POSE, TAGS_IN_TOTAL, CURRENT_POSE
         global CURRENT_STATE
         CURRENT_STATE = "navigate"
 
-        if len(TAGS_FOUND) >= TAGS_IN_TOTAL:
+        if len(TAGS_FOUND) >= TAGS_IN_TOTAL and self.stage == "toStart":
             return "find_all"
         else:
             userdata.goal.target_pose.header.stamp = rospy.Time.now()
@@ -164,10 +176,8 @@ class Navigate(State):
             # turn_goal.target_pose.header.frame_id = "odom"
             # turn_goal.target_pose.pose = CURRENT_POSE
 
-
             # euler = euler_from_quaternion((CURRENT_POSE.orientation.x, CURRENT_POSE.orientation.y, CURRENT_POSE.orientation.z, CURRENT_POSE.orientation.w))
             # quaternion = quaternion_from_euler(euler[0], euler[1], euler[2] * (-1))
-            
 
             # turn_goal.target_pose.pose.orientation.x = quaternion[0]
             # turn_goal.target_pose.pose.orientation.y = quaternion[1]
