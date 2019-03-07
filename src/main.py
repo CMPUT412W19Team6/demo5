@@ -4,7 +4,7 @@ import rospy
 import cv2
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import cv_bridge
-from geometry_msgs.msg import Twist, Pose, PoseStamped
+from geometry_msgs.msg import Twist, Pose, PoseStamped, PointStamped
 from smach import State, StateMachine
 import smach_ros
 from dynamic_reconfigure.server import Server
@@ -24,6 +24,7 @@ import actionlib
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 import tf2_ros
 import tf2_geometry_msgs
+import tf
 
 TAGS_FOUND = []
 START_POSE = None
@@ -87,10 +88,9 @@ class MoveCloser(State):
 
         self.current_marker = None
         self.tag_pose_base = None
-        self.distance_from_marker = 0.05
+        self.distance_from_marker = 0.2
 
-        self.tf_buffer = tf2_ros.Buffer(rospy.Duration(1200.0)) #tf buffer length
-        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+        self.listener = tf.TransformListener()
 
     def execute(self, userdata):
         global CURRENT_POSE
@@ -134,48 +134,19 @@ class MoveCloser(State):
                 self.vel_pub.publish(move_cmd)
             self.rate.sleep()
 
-        # goal = MoveBaseGoal()
-        # goal.target_pose.header.frame_id = "odom"
-
-        # yaw = euler_from_quaternion((self.tag_pose_odom.orientation.x, self.tag_pose_odom.orientation.y, self.tag_pose_odom.orientation.z, self.tag_pose_odom.orientation.w))[2]
-
-        # yaw += 3.14159 / 2
-        # while yaw < 0:
-        #     yaw += 2 * math.pi
-        # print("yaw is " + str(yaw * 180.0 / 3.14159))
-
-        # goal.target_pose.pose.position.y = self.tag_pose_odom.position.y - 0.4
-        # # if (3.0 / 2.0) * math.pi  <= yaw <= 2 * math.pi:
-        # #     goal.target_pose.pose.position.y = self.tag_pose_odom.position.y + self.distance_from_marker
-        # # elif  math.pi <= yaw <= (3.0 / 2.0) * math.pi:
-        # #     goal.target_pose.pose.position.y = self.tag_pose_odom.position.y + self.distance_from_marker
-        # # elif  (1.0 / 2.0) * math.pi  <= yaw < 2 * math.pi:
-        # #     goal.target_pose.pose.position.y = self.tag_pose_odom.position.y - self.distance_from_marker
-        # # else:
-        # #     goal.target_pose.pose.position.y = self.tag_pose_odom.position.y - self.distance_from_marker
-        
-        # goal.target_pose.pose.position.x = ((goal.target_pose.pose.position.y - self.tag_pose_odom.position.y) / math.sin(yaw)) * math.cos(yaw) + self.tag_pose_odom.position.x
-        # goal.target_pose.pose.orientation.w = 1
-
-        # goal = MoveBaseGoal()
-        # goal.target_pose.header.frame_id = "base_link"
-        # goal.target_pose.pose.position.x = .2
-        # goal.target_pose.pose.orientation.z = 1
-
-        pose = PoseStamped()
+        pose = PointStamped()
         pose.header.frame_id = "ar_marker_" + str(self.current_marker)
-        pose.header.stamp = rospy.Time.now()
-        pose.pose.position.x = self.distance_from_marker
+        pose.header.stamp = rospy.Time(0)
+        pose.point.z = self.distance_from_marker
 
-        transform = self.tf_buffer.lookup_transform("odom", #target frame
-                                       pose.header.frame_id, #source frame
-                                       rospy.Time(0), #get the tf at first available time
-                                       rospy.Duration(2.0)) #wait for 1 second
-
-        pose_transformed = tf2_geometry_msgs.do_transform_pose(pose, transform)
+        self.listener.waitForTransform("odom", pose.header.frame_id, rospy.Time(0),rospy.Duration(4))
+        
+        pose_transformed = self.listener.transformPoint("odom", pose)
 
         goal = MoveBaseGoal()
-        goal.target_pose = pose_transformed
+        goal.target_pose.header.frame_id = "odom"
+        goal.target_pose.pose.position.x = pose_transformed.point.x
+        goal.target_pose.pose.position.y = pose_transformed.point.y
         goal.target_pose.pose.orientation = START_POSE.orientation
         userdata.goal = goal
 
