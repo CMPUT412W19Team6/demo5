@@ -138,6 +138,12 @@ class MoveCloser(State):
         pose.header.frame_id = "ar_marker_" + str(self.current_marker)
         pose.header.stamp = rospy.Time(0)
         pose.point.z = self.distance_from_marker
+        
+
+        if self.current_marker == 2:
+            pose.point.x = -0.1
+        else:
+            pose.point.x = 0.1
 
         self.listener.waitForTransform("odom", pose.header.frame_id, rospy.Time(0),rospy.Duration(4))
         
